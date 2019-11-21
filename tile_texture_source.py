@@ -1,6 +1,11 @@
 import threading
+from functools import partial
+
+from pangolin.server_application.texture_library import TextureLibrary
+
+from abc import ABC, abstractmethod
 from pgl.gis.utility import Transfer, Tools
-from pgl.gis.classes import Tile
+from gis.maps.tiled_raster_maps import IRequestTexture
 
 class ITileTextureSource():
     def get_tile_texture_name(self, tile_index):
@@ -8,34 +13,43 @@ class ITileTextureSource():
 
 
 class BufferedTileTextureSource(ITileTextureSource):
-    def __init__(self, data_source, texture_library):
+    def __init__(self, data_source:IRequestTexture, texture_library:TextureLibrary):
         self.data_source = data_source
-        self._loaded_data = {}
+        self._loaded_data = []
         self.texture_library = texture_library
+        self.texture_library_lock = None
         self.lock = threading.Lock()
 
-    def get_tile_texture_name(self,tile_index):
+
+    def get_tile_texture_name(self,tile_index, on_complete_callback):
         """
         param tile_index: the tile index in form of (x,y,z)
         return: the texture name loaded in texture library
         """
-        if tuple(tile_index) in self._loaded_data.keys():
-            return self.tile_texture_name_by_index(tile_index)
+        if tile_index in self._loaded_data:
+            texture_name = self.tile_texture_name_by_index(tile_index)
+            on_complete_callback(texture_name)
         else:
-            return self._load_tile_map_from_source(tile_index)
+            self.data_source.request_texture(
+                tile_index,
+                partial(self._on_texture_loaded, tile_index, on_complete_callback)
+            )
 
-    def _load_tile_map_from_source(self, tile_index):
-        tile = self.data_source.get_tile(tile_index)
-        assert isinstance(tile, Tile)
-        name = self.tile_texture_name_by_index(tile_index)
+    def _on_texture_loaded(self,tile_index, on_complete_callback, img_64):
+        if img_64 is None:
+            return 
+
+        texture_name = self.tile_texture_name_by_index(tile_index)
         with self.lock:
-            self.texture_library.set(name, tile.image_64)
-            self._loaded_data[tuple(tile_index)] = tile
-        return name
+            self._loaded_data.append(tile_index)
+
+        if self.texture_library_lock:
+            with self.texture_library_lock:
+                self.texture_library.set(texture_name, img_64)
+        else:
+            self.texture_library.set(texture_name, img_64)
+        on_complete_callback(texture_name)
 
     def tile_texture_name_by_index(self, tile_index):
         return f'{self.data_source.__class__.__name__}-tile{list(tile_index)}'
-
-    def get_tile(self, tile_index):
-        return self._loaded_data[tuple(tile_index)]
 

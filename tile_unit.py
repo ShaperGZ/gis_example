@@ -22,22 +22,11 @@ class TileUnit:
         self.ref_geo_coord:list[float,float] = None
         self.tile_index:list[int,int] = None
         #self.tile = None
-        
+
         # model data:
         self.model_position:tuple = None
         self.model_size:float = None
         self.texture_name:str = None
-   
-
-        # event callback for async texture loading
-        self.on_texture_loaded:Callable = None
-
-    def load_texture(self, texture_source:ITileTextureSource):
-        # this method can be called by injecting a texture_source in saparate thread
-        # by a third party
-        self.texture_name = texture_source.get_tile_texture_name(self.tile_index)
-        if self.on_texture_loaded is not None and isinstance(self.on_texture_loaded, Callable):
-            self.on_texture_loaded(self.texture_name)
 
     def format(self):
         t = 'TileUnit:\n'
@@ -45,7 +34,7 @@ class TileUnit:
         t += '    model_position:', self.model_positioni, '/n'
         t += '    model_size:', self.model_size, '/n'
         t += '    texture_name:',self.texture_name, '/n'
-    
+
     @staticmethod
     def create_by_arbitray_position(arbitray_position:list, zoom, city_center):
         """
